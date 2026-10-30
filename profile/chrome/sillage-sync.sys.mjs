@@ -29,10 +29,14 @@ const hashesOf = D => { let m = hashTables.get(D); if (!m) hashTables.set(D, (m 
 const serialize = o => JSON.stringify(o, (k, v) => (k.startsWith("_") ? undefined : v));
 
 const profileFields = p => ({ name: p.name, favorites: p.favorites });
-const workspaceFields = (w, order) => ({
+const workspaceFields = w => ({
   name: w.name, icon: w.icon, hue: w.hue, profile: w.profile, pinned: w.pinned,
-  notes: w.board?.notes || [], items: w.board?.items || [], hiddenExtensions: w.hiddenExtensions || [], order,
+  notes: w.board?.notes || [], items: w.board?.items || [], hiddenExtensions: w.hiddenExtensions || [],
 });
+
+/* The workspace order is one value of its own (ids, last modified), not a field of each workspace: an index per
+   workspace made every device's stale indices compete and scramble the order. */
+const orderIds = D => D.workspaces.filter(w => !pristine(w, "workspace")).map(w => w.id);
 
 /* A workspace or profile nobody has touched yet (fresh install defaults). */
 function pristine(entity, kind) {
@@ -53,7 +57,12 @@ export function stamp(D, { initial = false } = {}) {
     if (!initial) { entity.mod = now; changed = true; }
   };
   D.profiles.forEach(p => check("p:" + p.id, profileFields(p), p));
-  D.workspaces.forEach((w, i) => check("w:" + w.id, workspaceFields(w, i), w));
+  D.workspaces.forEach(w => check("w:" + w.id, workspaceFields(w), w));
+  const order = JSON.stringify(orderIds(D));
+  if (hashes.get("order") !== order) {
+    hashes.set("order", order);
+    if (!initial) { D.sync.orderMod = now; changed = true; }
+  }
   return changed;
 }
 
@@ -67,6 +76,8 @@ export function initStamps(D) {
     for (const w of D.workspaces) if (!pristine(w, "workspace")) w.mod ||= now;
   }
   D.sync.tombstones ||= {};
+  // Upgrade from per-workspace order: the most recently edited workspace used to decide.
+  D.sync.orderMod ??= Math.max(0, ...D.workspaces.map(w => w.mod || 0));
   hashesOf(D).clear();
   stamp(D, { initial: true });
 }
@@ -83,7 +94,8 @@ export function buildState(D) {
   const now = Date.now();
   const state = { v: 1, profiles: {}, workspaces: {} };
   for (const p of D.profiles) if (!pristine(p, "profile")) state.profiles[p.id] = { ...profileFields(p), mod: p.mod || 0 };
-  D.workspaces.forEach((w, i) => { if (!pristine(w, "workspace")) state.workspaces[w.id] = { ...workspaceFields(w, i), mod: w.mod || 0 }; });
+  for (const w of D.workspaces) if (!pristine(w, "workspace")) state.workspaces[w.id] = { ...workspaceFields(w), mod: w.mod || 0 };
+  state.order = { ids: orderIds(D), mod: D.sync?.orderMod || 0 };
   for (const [key, time] of Object.entries(D.sync?.tombstones || {})) {
     if (now - time > TOMBSTONE_TTL) { delete D.sync.tombstones[key]; continue; }
     const [kind, id] = key.split(":");
@@ -127,7 +139,6 @@ export function merge(D, remote) {
     result.changed = true;
   }
 
-  let reorder = false;
   for (const [id, r] of Object.entries(remote.workspaces || {})) {
     const w = D.workspaces.find(x => x.id === id);
     const localMod = w ? w.mod || 0 : tomb["workspace:" + id] || -1;
@@ -142,13 +153,12 @@ export function merge(D, remote) {
       continue;
     }
     const profile = D.profiles.some(p => p.id === r.profile) ? r.profile : D.profiles[0].id;
-    const fields = { name: r.name, icon: r.icon, hue: r.hue, profile, pinned: r.pinned || [], hiddenExtensions: r.hiddenExtensions || [], mod: r.mod, _order: r.order };
+    const fields = { name: r.name, icon: r.icon, hue: r.hue, profile, pinned: r.pinned || [], hiddenExtensions: r.hiddenExtensions || [], mod: r.mod };
     if (w) {
       Object.assign(w, fields);
       w.board = { ...(w.board || { view: { x: 0, y: 0, z: 1 } }), notes: r.notes || [], items: r.items || [] };
     } else {
       D.workspaces.push({ id, ...fields, board: { notes: r.notes || [], items: r.items || [], view: { x: 0, y: 0, z: 1 } } });
-      reorder = true;
     }
     delete tomb["workspace:" + id];
     result.changed = true;
@@ -165,13 +175,17 @@ export function merge(D, remote) {
     }
   }
 
-  if (reorder || result.changed) {
-    // Remote order for synced workspaces; local-only ones keep their place at the end.
-    D.workspaces.forEach((w, i) => { if (w._order == null) w._order = 1000 + i; });
-    D.workspaces.sort((a, b) => a._order - b._order);
-    D.workspaces.forEach(w => delete w._order);
+  // The newer order wins as a whole; workspaces it does not list (local-only) keep their place after the others.
+  if (remote.order?.ids && remote.order.mod > (D.sync?.orderMod || 0)) {
+    const rank = id => { const i = remote.order.ids.indexOf(id); return i < 0 ? Infinity : i; };
+    const before = D.workspaces.map(w => w.id).join();
+    D.workspaces.sort((a, b) => rank(a.id) - rank(b.id)); // stable: ties keep the local order
+    D.sync ||= { tombstones: {} };
+    D.sync.orderMod = remote.order.mod;
+    if (D.workspaces.map(w => w.id).join() !== before) result.changed = true;
   }
-  for (const w of D.workspaces) hashes.set("w:" + w.id, serialize(workspaceFields(w, D.workspaces.indexOf(w))));
+  for (const w of D.workspaces) hashes.set("w:" + w.id, serialize(workspaceFields(w)));
+  hashes.set("order", JSON.stringify(orderIds(D)));
 
   // Anything we know better than the server goes back up on the next sync.
   const merged = buildState(D);

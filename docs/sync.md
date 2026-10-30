@@ -8,7 +8,7 @@ collection that other Firefox clients ignore.
 
 | Synced | Not synced (per device) |
 |---|---|
-| Workspaces: name, icon, hue, profile, pinned tree, board notes and items, hidden extensions, order | Open tabs (Firefox syncs them already) |
+| Workspaces: name, icon, hue, profile, pinned tree, board notes and items, hidden extensions; their order | Open tabs (Firefox syncs them already) |
 | Profiles: name, favorites | Sidebar width and visibility, board pan and zoom |
 | Deletions of workspaces and profiles | The container behind each profile (created locally on arrival) |
 
@@ -23,6 +23,9 @@ should follow the user means adding it there**, and to `pristine()` if it can ma
   `mod = now`. So "last modified" is per workspace and per profile.
 - `merge()` applies a remote state: for each entity, the side with the higher `mod` wins. Profiles are merged
   first since workspaces refer to them. A profile arriving from another device gets a new local container.
+- The workspace order is a single value of its own, `order: { ids, mod }`, with its own `D.sync.orderMod`; the
+  newer one wins as a whole. (It used to be an index inside each workspace, merged per workspace: workspaces
+  that had not changed kept stale positions and the order differed from one device to the other.)
 - Deletions are tombstones in `D.sync.tombstones` (`"workspace:<id>"` → time), kept 90 days, uploaded as
   `{ deleted: true, mod }`.
 - **Pristine** entities (fresh-install defaults, `mod` 0 and empty) are never uploaded and never win. When a

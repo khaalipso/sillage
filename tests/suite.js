@@ -850,8 +850,31 @@
     stale.workspaces[linux.workspaces[0].id].mod = 1;
     Sync.merge(linux, stale);
     ok(linux.workspaces[0].name === "Renamed on Mac", "older remote changes are ignored");
+    // Reordering on one device reaches the other even when no workspace was edited, and a stale order loses.
+    {
+      const extra = { id: "syncorder", name: "Order", icon: "star", hue: 10, profile: linux.profiles[0].id, pinned: [{ type: "item", id: "o1", url: "https://example.com/o", title: "o" }], board: { notes: [], items: [], view: { x: 0, y: 0, z: 1 } }, mod: Date.now() };
+      linux.workspaces.push(extra);
+      Sync.stamp(linux);
+      Sync.merge(mac, Sync.buildState(linux));
+      const ids = d => d.workspaces.map(w => w.id).join();
+      mac.workspaces.reverse();
+      Sync.stamp(mac);
+      mac.sync.orderMod = Date.now() + 1000;
+      const staleOrder = Sync.buildState(linux);
+      Sync.merge(linux, Sync.buildState(mac));
+      ok(ids(linux) === ids(mac), "workspace order follows the device that reordered", ids(linux) + " vs " + ids(mac));
+      const before = ids(linux);
+      staleOrder.order.mod = 1;
+      staleOrder.order.ids.reverse();
+      Sync.merge(linux, staleOrder);
+      ok(ids(linux) === before, "an older workspace order is ignored");
+      linux.workspaces.splice(linux.workspaces.findIndex(w => w.id === "syncorder"), 1);
+      mac.workspaces.splice(mac.workspaces.findIndex(w => w.id === "syncorder"), 1);
+      Sync.stamp(linux);
+      Sync.stamp(mac);
+    }
     // Deletion propagates.
-    const gone = linux.workspaces[1].id;
+    const gone = linux.workspaces.find(w => w.name !== "Renamed on Mac").id;
     Sync.noteDeletion(mac, "workspace", gone);
     mac.workspaces.splice(mac.workspaces.findIndex(w => w.id === gone), 1);
     const r3 = Sync.merge(linux, Sync.buildState(mac));
