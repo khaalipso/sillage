@@ -19,7 +19,7 @@ echo 'user_pref("termsofuse.bypassNotification", true);' >> "$PROF/user.js"
 
 MOZ_HEADLESS=1 MOZ_HEADLESS_WIDTH=1400 MOZ_HEADLESS_HEIGHT=900 "$FF_BIN" --no-remote --profile "$PROF" about:blank >/dev/null 2>&1 &
 pid=$!
-( sleep 120; kill $pid 2>/dev/null ) &
+( sleep 120; kill $pid 2>/dev/null ) >/dev/null 2>&1 &
 watchdog=$!
 wait $pid 2>/dev/null
 kill $watchdog 2>/dev/null
