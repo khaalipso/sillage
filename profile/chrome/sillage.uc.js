@@ -1863,13 +1863,16 @@
     const rank = { tab: 0, item: 1, history: 2 };
     let best = -1;
     res.forEach((r, i) => {
-      if (!(r.kind in rank) || !bare(r.sub).startsWith(needle)) return;
+      if (!(r.kind in rank) || r.far || !bare(r.sub).startsWith(needle)) return;
       if (best < 0 || rank[r.kind] < rank[res[best].kind]) best = i;
     });
     if (best > 0) res.unshift(...res.splice(best, 1));
   }
 
   function showResults(res, q) {
+    // Results from other workspaces come last, each preceded by an offer to open the page here.
+    res = res.filter(r => !r.far).concat(res.filter(r => r.far).flatMap(r => [
+      { kind: "here", title: r.title, sub: r.sub, url: r.sub, icon: r.icon, badge: "Open here" }, r]));
     if (!palTouched) { autofill(res, q); palSel = 0; }
     palResults = res;
     drawResults();
@@ -1901,7 +1904,7 @@
       .sort(byRecency).slice(0, 5);
     for (const t of tabs) {
       seen.add(tabUrl(t));
-      res.push({ kind: "tab", tab: t, title: t.label, sub: tabUrl(t), icon: tabIcon(t), badge: (tabItemId(t) ? "Pinned" : "Tab") + wsLabel(tabWs(t)) });
+      res.push({ kind: "tab", tab: t, far: !inView(t), title: t.label, sub: tabUrl(t), icon: tabIcon(t), badge: (tabItemId(t) ? "Pinned" : "Tab") + wsLabel(tabWs(t)) });
     }
     const local = r => (r.ws ? r.ws.id === activeWs : r.profile.id === curProf().id) ? 0 : 1;
     for (const { item, ws, profile } of [...walkItems()].sort((a, b) => local(a) - local(b))) {
@@ -1909,7 +1912,7 @@
       if (profile.id !== curProf().id && !ws) continue;
       if (!matches(`${item.customTitle || ""} ${item.title} ${item.url}`, words)) continue;
       seen.add(item.url);
-      res.push({ kind: "item", id: item.id, title: item.customTitle || item.title, sub: item.url, icon: item.icon, badge: (ws ? "Pinned" : "Favorite") + wsLabel(ws?.id) });
+      res.push({ kind: "item", far: !!ws && ws.id !== activeWs, id: item.id, title: item.customTitle || item.title, sub: item.url, icon: item.icon, badge: (ws ? "Pinned" : "Favorite") + wsLabel(ws?.id) });
     }
     const cmds = [...dynamicCommands(), ...COMMANDS].filter(c => matches(`${c.title} ${c.kw}`, words)).slice(0, 3)
       .map(c => ({ kind: "cmd", cmd: c.cmd, title: c.title, badge: "Command" }));
@@ -1933,10 +1936,10 @@
   function drawResults() {
     const kindIcon = { search: "search", go: "globe", cmd: "cmd", history: "clock" };
     palList.replaceChildren(...palResults.map((r, i) => h("div", { class: `sl-pr${i === palSel ? " sel" : ""}`, "data-i": i },
-      r.kind === "tab" || r.kind === "item" || r.kind === "history" ? favicon(r.sub, r.icon) : icon(kindIcon[r.kind] || "globe"),
+      ["tab", "item", "history", "here"].includes(r.kind) ? favicon(r.sub, r.icon) : icon(kindIcon[r.kind] || "globe"),
       h("div", { class: "sl-pr-txt" },
         h("span", { class: "sl-pr-title", text: r.title }),
-        r.sub && h("span", { class: "sl-pr-sub", text: r.kind === "tab" || r.kind === "item" || r.kind === "history" ? host(r.sub) : r.sub })),
+        r.sub && h("span", { class: "sl-pr-sub", text: ["tab", "item", "history", "here"].includes(r.kind) ? host(r.sub) : r.sub })),
       r.badge && h("span", { class: "sl-pr-badge", text: r.badge }))));
     // Manual scrolling: scrollIntoView would also scroll the window's containers.
     const sel = palList.querySelector(".sel");
@@ -3326,6 +3329,12 @@
         e.preventDefault();
         e.stopPropagation();
         return stepWs(e.key === "ArrowLeft" ? -1 : 1);
+      }
+      // Little Sillage is one throwaway page: Ctrl+W / ⌘W closes the window, not just its tab.
+      if (little && accel(e) && !e.shiftKey && !e.altKey && e.code === "KeyW") {
+        e.preventDefault();
+        e.stopPropagation();
+        return window.close();
       }
       if (e.target === gBrowser.selectedBrowser && !["Control", "Shift", "Alt", "Meta"].includes(e.key)) pageEngaged = true;
       const editable = e.target !== gBrowser.selectedBrowser && chromeField(e.target);
