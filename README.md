@@ -50,7 +50,7 @@ Firefox.
   (or opens the page), and the sidebar is left unchanged.
 - **Glance**: a link that would open a new tab (or any link with <kbd>Shift</kbd>+click) shows in a card over the
   current page instead, like Arc's Peek. Click beside it or press <kbd>Esc</kbd> to close it, or *Open as tab* (<kbd>Ctrl</kbd>+<kbd>O</kbd>) to
-  keep it. <kbd>Ctrl</kbd>+click still opens a background tab. Can be turned off from the palette.
+  keep it. The card stays open when you visit another tab. <kbd>Ctrl</kbd>+click still opens a background tab. Can be turned off from the palette.
 - **Little Sillage**: links opened from other apps land in a small separate window instead of a workspace;
   "Open in…" moves the tab into the workspace of your choice. With several profiles, the window first asks
   which profile to open the link with (<kbd>1</kbd>…<kbd>9</kbd>, arrows and <kbd>Enter</kbd>; the last choice
@@ -59,7 +59,7 @@ Firefox.
   follow you across devices, end-to-end encrypted like the rest of Firefox Sync.
 - **Light on memory**: after a restart, tabs load when you open them; once loaded they stay alive. Hovering a
   sidebar row prepares its tab so switching is instant.
-- **Loading spinner** in the page area while a tab loads or reloads, so a slow page never looks like a bug.
+- **Loading spinner**: a small comet over a night sky when a tab has no page to show yet (slow server, hanging load), so it never looks like a bug.
 - **A calm empty screen**: with nothing open, a night sky and a comet greet you with a few kind words that change with the time of day.
 - **Pinned tabs** that keep their home URL; closing a pinned tab unloads it instead of removing it.
 - **Auto-archiving** of today tabs that have not been viewed for a while (12 hours to 7 days, or never).

@@ -945,8 +945,14 @@
       await until(() => S.glance());
       const g3 = S.glance();
       S.selectTab(page);
-      ok(await until(() => !S.glance() && !g3.tab.isConnected, 1000) && sel() === page, "selecting another tab dismisses the card");
-      // The page under the card is now a background tab: not left rendering, shown again when chosen.
+      await new Promise(r => setTimeout(r, 100));
+      ok(S.glance() === g3 && document.getElementById("sl-glance").hidden && !document.documentElement.hasAttribute("sl-glance"), "selecting another tab hides the card but keeps it");
+      S.selectTab(g2.tab);
+      ok(await until(() => S.glance() === g3 && !document.getElementById("sl-glance").hidden && document.documentElement.hasAttribute("sl-glance"), 1000), "choosing the page brings the card back");
+      S.closeGlance();
+      ok(await until(() => !S.glance() && !g3.tab.isConnected, 1000) && sel() === g2.tab, "closing the card returns to the page");
+      S.selectTab(page);
+      // The page left behind is a background tab: not left rendering, shown again when chosen.
       ok(await until(() => !g2.tab.linkedBrowser.docShellIsActive, 1000), "the page under the card goes to the background");
       S.selectTab(g2.tab);
       ok(await until(() => g2.tab.linkedBrowser.docShellIsActive && g2.tab.linkedBrowser.renderLayers, 2000), "and is shown again when selected");
@@ -979,7 +985,13 @@
       const realHas = page.hasAttribute.bind(page);
       page.hasAttribute = a => (a === "busy" ? busy : realHas(a));
       S.updateLoading();
-      ok(await until(() => S.loadEl && !S.loadEl.hidden, 1500), "a loading page shows the spinner");
+      S.updateLoading();
+      await new Promise(r => setTimeout(r, 600));
+      ok(!S.loadEl || S.loadEl.hidden, "a loading tab that already shows a page has no spinner");
+      // A tab with nothing to show yet (slow server, hanging load): as if it were still on about:blank.
+      Object.defineProperty(page.linkedBrowser, "documentURI", { value: { spec: "about:blank" }, configurable: true });
+      S.updateLoading();
+      ok(await until(() => S.loadEl && !S.loadEl.hidden, 1500), "a loading tab with no page shows the spinner");
       busy = false; S.updateLoading();
       ok(S.loadEl.hidden, "the spinner goes away when loading ends");
       gBrowser.removeTab(page, { animate: false });

@@ -239,9 +239,17 @@
 .sl-letter { display: grid; place-items: center; font-size: 10px; font-weight: 700; color: white; background: hsl(var(--lh) 55% 50%); }
 .sl-spin { border: 2px solid var(--sl-line); border-top-color: var(--sl-accent); border-radius: 50%; animation: sl-spin .7s linear infinite; width: 12px; height: 12px; margin: 2px; }
 @keyframes sl-spin { to { transform: rotate(360deg); } }
-#sl-loading { position: fixed; left: var(--ld-x); top: var(--ld-y); width: var(--ld-w); height: var(--ld-h); z-index: 120; display: grid; place-items: center; pointer-events: none; animation: sl-fade .2s; }
+/* Loading with no page to show: the night sky of the empty screen, and a comet circling a star. */
+#sl-loading { position: fixed; left: var(--ld-x); top: var(--ld-y); width: var(--ld-w); height: var(--ld-h); z-index: 120; display: grid; place-items: center; pointer-events: none; animation: sl-fade .25s;
+  background: radial-gradient(ellipse at 70% 30%, #1a1226 0%, #0a0810 55%, #000 100%); }
 #sl-loading[hidden] { display: none; }
-#sl-loading .sl-spin { width: 22px; height: 22px; margin: 0; border-width: 3px; padding: 0; box-sizing: content-box; background: var(--sl-bg, hsl(var(--sl-h) 20% 96%)); box-shadow: 0 0 0 8px var(--sl-bg, hsl(var(--sl-h) 20% 96%)); }
+.sl-orbit { position: relative; width: 52px; height: 52px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+.sl-orbit::before { content: ""; position: absolute; left: 50%; top: 50%; width: 5px; height: 5px; margin: -2.5px; border-radius: 50%; background: #fff; box-shadow: 0 0 10px 2px rgb(255 255 255 / .55); }
+.sl-orbit i { position: absolute; inset: 0; border-radius: 50%; animation: sl-spin 1.3s linear infinite;
+  background: conic-gradient(from 0deg, transparent 0 40%, rgb(255 255 255 / .85) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px)); mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px)); }
+.sl-orbit i::after { content: ""; position: absolute; top: -2px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; background: #fff; box-shadow: 0 0 12px 3px rgb(255 255 255 / .7); }
+@media (prefers-reduced-motion: reduce) { .sl-orbit i { animation-duration: 3s; } }
 
 .sl-folder-head { color: var(--sl-fg-dim); }
 .sl-chev { width: 12px; height: 12px; transition: transform .2s var(--sl-ease); }

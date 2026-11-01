@@ -44,8 +44,10 @@ Each section names the functions to start from in `profile/chrome/sillage.uc.js`
 - Icons (`favicon`): the tab's icon, then the site's cached icon (`rememberIcon` on `TabAttrModified`
   `image`, `cachedIcon`), then `page-icon:`, then a colored letter; each failing source falls through to the
   next. A loading tab keeps its known icon, dimmed; the spinner only shows when no icon is known yet.
-- Loading: when the selected tab stays `busy` for 250 ms, `updateLoading()` shows `#sl-loading`, a spinner centred over the
-  page area (the content can be black while a page starts). Not shown on the board, which has its own message.
+- Loading: when the selected tab stays `busy` for 250 ms with no page to show (`pageShown`: its document is still
+  about:blank, e.g. a slow server or a hanging load), `updateLoading()` shows `#sl-loading` over the page area: the night sky
+  of the empty screen with a comet circling a star (`.sl-orbit`). A page already on screen stays visible. Hidden when the
+  location changes (`onLocationChange`). Not shown on the board, which has its own message.
 - Empty workspace: the board shows a night sky (`buildHello`, `.sl-hello`, styled after the khaalipso.cloud site) with a comet and
   kind words picked by `showHello()` from `HELLO` (by time of day) and `HELLO_SUB` (random) each time the screen appears.
   Only finite animations, and none under `prefers-reduced-motion`. Adding a note or item removes it.
@@ -87,8 +89,8 @@ A link that would open a foreground tab shows in a card over the current page.
   attributes. `#sl-glance` adds the shade (a clip path with a hole where the card is) and the buttons.
   `positionGlance()` computes the card's place instead of measuring it, because the card is animated.
 - `closeGlance({ keep })` undoes the split view and either keeps the tab (selected, listed in the sidebar) or
-  closes it. Selecting another tab closes the card; this is deferred by one tick because Firefox also moves the
-  selection away from a tab it is about to close. Ctrl+O (⌘O) keeps the card as a tab.
+  closes it. Selecting another tab only hides the card (`showGlance(false)`); choosing its page or the card
+  brings it back. Switching workspace still closes it. Ctrl+O (⌘O) keeps the card as a tab.
 - Firefox's tab switcher does not turn off the pages of a split view when another tab is chosen, and nothing
   does once the split view is gone: switching back later found a page it believed was painted, and the tab
   stayed empty. `sendToBackground()` sets `docShellIsActive = false` on the card or the page left in the

@@ -1012,18 +1012,21 @@
     laterTimer = setTimeout(() => { laterTimer = 0; render(); }, Math.max(0, lastRender + 250 - performance.now()));
   }
   const SHOWN_ATTRS = new Set(["label", "image", "busy", "soundplaying", "muted", "pending", "activemedia-blocked", "crashed", "pictureinpicture"]);
-  /* A loading page can leave the content area black for a moment: a small spinner says it is not a bug.
-     Delayed so quick loads never flash it; the board (the "nothing open" screen) has its own message. */
+  /* While a tab loads and there is no page to show yet (a new tab waiting for a slow server, a load that
+     hangs), the content area would stay black: a night sky with a small comet says it is not a bug. A page
+     that is already there (reload, navigation) stays visible instead. Delayed so quick loads never flash it;
+     the board (the "nothing open" screen) has its own message. */
+  const pageShown = t => { const u = t.linkedBrowser?.documentURI?.spec; return !!u && u !== "about:blank"; };
   let loadEl, loadTimer;
   function updateLoading() {
     clearTimeout(loadTimer);
     const t = gBrowser.selectedTab;
-    const want = () => alive(t) && t.selected && t.hasAttribute("busy") && !boardOpen && !little;
+    const want = () => alive(t) && t.selected && t.hasAttribute("busy") && !pageShown(t) && !boardOpen && !little;
     if (!want()) { loadEl?.setAttribute("hidden", ""); return; }
     loadTimer = setTimeout(() => {
       if (!want()) return;
       if (!loadEl) {
-        loadEl = h("div", { id: "sl-loading", hidden: true }, h("span", { class: "sl-spin" }));
+        loadEl = h("div", { id: "sl-loading", hidden: true }, h("span", { class: "sl-orbit" }, h("i")));
         doc.body.append(loadEl);
       }
       const box = $("#tabbrowser-tabbox").getBoundingClientRect();
@@ -2292,15 +2295,24 @@
   function openGlance(t, parent) {
     const split = gBrowser.addTabSplitView([parent, t], { insertBefore: parent });
     if (!split) throw new Error("no split view");
-    glance = { tab: t, parent, split };
+    glance = { tab: t, parent, split, shown: true };
     gBrowser.setSuccessor(t, parent);
     doc.getElementById(parent.linkedPanel)?.setAttribute("sl-glance-base", "");
     doc.getElementById(t.linkedPanel)?.setAttribute("sl-glance-card", "");
-    doc.documentElement.setAttribute("sl-glance", "");
-    glanceBox.hidden = false;
     gBrowser.selectedTab = t;
+    showGlance(true);
     positionGlance();
     render();
+  }
+
+  /* The card outlives a visit to another tab: it is only hidden (the overlay and the card styling), and comes
+     back when the page or the card is selected again. */
+  function showGlance(on) {
+    if (!glance) return;
+    glance.shown = on;
+    doc.documentElement.toggleAttribute("sl-glance", on);
+    glanceBox.hidden = !on;
+    if (on) positionGlance();
   }
 
   /* keep: the card stays as a regular tab of the workspace (selected); otherwise it is closed.
@@ -2308,13 +2320,9 @@
   function closeGlance({ keep = false, select = true, closing = false } = {}) {
     if (!glance) return;
     const { tab, parent, split } = glance;
+    showGlance(false);
     glance = null;
-    const unstyle = () => {
-      doc.documentElement.removeAttribute("sl-glance");
-      for (const el of doc.querySelectorAll("[sl-glance-base], [sl-glance-card]")) el.removeAttribute(el.hasAttribute("sl-glance-base") ? "sl-glance-base" : "sl-glance-card");
-      glanceBox.hidden = true;
-    };
-    unstyle();
+    for (const el of doc.querySelectorAll("[sl-glance-base], [sl-glance-card]")) el.removeAttribute(el.hasAttribute("sl-glance-base") ? "sl-glance-base" : "sl-glance-card");
     setTimeout(() => sendToBackground(parent, tab), 0);
     if (closing) return render();
     try { if (split.isConnected) split.unsplitTabs(); } catch (e) { log("unsplit " + e); }
@@ -3466,11 +3474,11 @@
       const t = gBrowser.selectedTab;
       updateLoading();
       if (little) return render();
-      // Another tab chosen while a card is shown: the card goes away. Deferred: Firefox also moves the
-      // selection away from a tab it is about to close, and then the card is already being torn down.
-      if (glance && t !== glance.tab) {
-        const g = glance;
-        setTimeout(() => { if (glance === g) closeGlance({ select: false }); }, 0);
+      // Another tab chosen while a card is shown: the card is hidden, not closed; it is back when its page
+      // or the card is chosen again. (Firefox's split view shows both tabs together.)
+      if (glance) {
+        const mine = t === glance.tab || t === glance.parent;
+        if (mine !== glance.shown) showGlance(mine);
       }
       adoptEmptyTab(t);
       if (isBlank(t)) openBoard();
@@ -3504,6 +3512,7 @@
       onLocationChange(browser, webProgress, request, location, flags) {
         if (!webProgress.isTopLevel) return;
         const t = gBrowser.getTabForBrowser(browser);
+        if (t?.selected) updateLoading(); // the page arrived: no more spinner
         if (t?.selected && !(flags & Ci.nsIWebProgressListener.LOCATION_CHANGE_SAME_DOCUMENT)) resetEngaged();
         if (t) {
           const url = location?.spec || "";
