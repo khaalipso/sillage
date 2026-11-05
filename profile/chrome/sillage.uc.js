@@ -975,7 +975,7 @@
       icon("plus"), h("span", { class: "sl-title", text: "New Tab" }), h("kbd", { text: IS_MAC ? "⌘T" : "Ctrl T" }));
     const divider = h("div", { class: "sl-divider" }, h("span", { class: "sl-line" }), orb, h("span", { class: "sl-line" }),
       h("button", { class: "sl-clear", text: "Clear", title: "Close today tabs", onclick: clearToday }));
-    scroll = h("div", { id: "sl-scroll" }, favBox, wsTitle, pinBox, divider, newTabRow, todayBox);
+    scroll = h("div", { id: "sl-scroll" }, wsTitle, pinBox, divider, newTabRow, todayBox);
 
     wsBar = h("div", { id: "sl-ws-bar" });
     const bottom = h("div", { id: "sl-bottom" },
@@ -986,7 +986,8 @@
 
     side = h("div", { id: "sl-sidebar" });
     browserBox.prepend(side);
-    side.append(gNavToolbox, scroll, bottom, resizer);
+    // Favorites sit outside the scrolling list: they stay in view whatever the number of tabs.
+    side.append(gNavToolbox, favBox, scroll, bottom, resizer);
     // The container label (shown by Firefox at the end of the address bar) would take the room of the URL
     // in the narrow sidebar: it moves to the free space of the toolbar's top row. Firefox still updates it.
     const ucIcons = $("#userContext-icons");

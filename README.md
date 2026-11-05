@@ -14,7 +14,7 @@ Firefox.
 
 ## Features
 
-- **Sidebar** with favorites, pinned tabs, folders and today tabs (hover any tab for its close button, or
+- **Sidebar** with favorites (fixed at the top, they do not scroll away), pinned tabs, folders and today tabs (hover any tab for its close button, or
   middle-click it). Toggle it per window with
   <kbd>Ctrl</kbd>+<kbd>S</kbd> or <kbd>Ctrl</kbd>+<kbd>B</kbd>; when hidden, hover the left edge of the window to peek at it
   (over the board too). Double-click a tab to go back to the page it started on: a pinned tab returns to its

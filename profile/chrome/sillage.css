@@ -195,7 +195,8 @@
 }
 
 /* Favoris */
-#sl-favorites { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 6px; margin-bottom: 10px; }
+/* Outside #sl-scroll (fixed at the top); the right margin matches its padding so the tiles line up with the list. */
+#sl-favorites { display: grid; grid-template-columns: repeat(auto-fill, minmax(50px, 1fr)); gap: 6px; margin: 0 6px 10px 0; flex: none; }
 #sl-favorites:empty { display: none; }
 :root.sl-is-dragging #sl-favorites:empty { display: block; height: 40px; border: 1.5px dashed var(--sl-line); border-radius: 10px; }
 .sl-fav-tile { height: 44px; display: grid; place-items: center; border-radius: 10px; background: var(--sl-hover); position: relative; transition: background-color .12s ease, transform .12s ease; }

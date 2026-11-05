@@ -31,6 +31,10 @@
     ok(getComputedStyle(document.getElementById("TabsToolbar")).display === "none", "native tab strip hidden");
     ok(S.D.workspaces.length === 1, "default workspace");
 
+    // --- favorites are fixed above the scrolling list
+    const favZone = document.getElementById("sl-favorites");
+    ok(favZone.parentNode.id === "sl-sidebar" && !document.getElementById("sl-scroll").contains(favZone), "favorites sit outside the scrolling list");
+
     // --- today tabs
     const a = S.newTab("https://example.com/");
     const b = S.newTab("https://example.org/");
