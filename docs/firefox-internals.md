@@ -59,3 +59,12 @@ Picture-in-Picture when leaving a tab, DRM on, no new tab page, no default-brows
 1. `make test`; failures usually point at the internal that changed.
 2. Read `sillage.log` in the profile for exceptions at startup.
 3. Check this list against the Firefox release notes and the changed files on searchfox.
+
+## Unloading tabs (`discardBrowser`) and stuck restores
+
+Sillage unloads tabs idle for 2 hours (`discardIdle`, `gBrowser.discardBrowser`). In Firefox 158, a tab selected
+within a second or so of being unloaded can stay `pending` on `about:blank` forever: the session restore never
+completes, and `reload()`, `reloadTab()` and `SessionStore.restoreTabContent()` do nothing. Loading the URL of its
+last session entry with `fixupAndLoadURIString` does work, which is what `healStuck` does 4 s after selecting a
+pending tab. `discardIdle` also stays idle for 10 minutes after `wake_notification`: timers fire on wake, which
+would otherwise unload every tab just as the user comes back and clicks one.

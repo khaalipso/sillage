@@ -476,12 +476,27 @@
     await wait(200);
     ok(sel() === f1, "closing a tab returns to the previously active tab", url(sel()));
 
+    // --- a tab unloaded then selected at once stays blank: Sillage loads its page itself
+    const stuck = S.newTab("https://example.org/?stuck");
+    await until(() => !stuck.hasAttribute("busy") && url(stuck).startsWith("https://example.org"));
+    S.selectTab(a);
+    gBrowser.discardBrowser(stuck);
+    S.selectTab(stuck);
+    ok(await until(() => url(stuck).startsWith("https://example.org/?stuck"), 12000), "tab selected right after being unloaded still loads", url(stuck));
+
     // --- palette autofill
     await until(() => url(f2).includes("f2"));
     await S.query("example.com/?f2");
     ok(S.palResults[0]?.kind === "tab" && S.palResults[0].tab === f2 && S.palSel === 0, "autofill: matching tab moves to the top", S.palResults[0]?.kind);
     await S.query("exam");
     ok(S.palResults[0]?.kind === "tab" && S.palResults[0].sub.startsWith("https://example."), "autofill: \"exam\" → example.com");
+    await S.query("map");
+    ok(S.palResults[0]?.kind === "site" && S.palResults[0].url === "https://www.google.com/maps" && S.palSel === 0, "autofill: \"map\" → Google Maps", S.palResults[0]?.url);
+    await S.query("yt");
+    ok(S.palResults[0]?.kind === "site" && S.palResults[0].url.includes("youtube.com"), "autofill: \"yt\" → YouTube");
+    await S.query("youtu");
+    ok(S.palResults.some(r => r.kind === "site" && r.url.includes("youtube.com")), "site prefix match");
+    ok(S.siteMatches("map zzz").length === 0, "no site match for multi-word input");
     await S.query("exam ple");
     ok(S.palResults[0]?.kind === "search", "no autofill for multi-word searches");
     S.closePalette();
@@ -995,6 +1010,19 @@
       busy = false; S.updateLoading();
       ok(S.loadEl.hidden, "the spinner goes away when loading ends");
       gBrowser.removeTab(page, { animate: false });
+    }
+
+    // --- ghost tabs: the selected tab is checked and repaired after sleep
+    {
+      const h = S.newTab("https://example.com/?heal");
+      gBrowser.selectedTab = h;
+      await until(() => !h.hasAttribute("busy") && h.linkedBrowser.browsingContext?.currentWindowGlobal, 8000);
+      ok(S.healTab(h) === "repainted", "a loaded selected tab is repainted");
+      const other = S.newTab("https://example.org/?heal2");
+      gBrowser.selectedTab = h;
+      ok(S.healTab(other) !== "reloaded", "a healthy background tab is left alone");
+      gBrowser.discardBrowser(other, true);
+      ok(S.healTab(other) === "skip", "an unloaded tab is skipped");
     }
 
     // --- interface screenshot

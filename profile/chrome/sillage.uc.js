@@ -234,18 +234,22 @@
   /* ---------- per-profile history (palette) ---------- */
 
   let histSaveTimer;
+  // url -> entry, per list: avoids scanning thousands of entries on every navigation.
+  const histIndex = new WeakMap();
   function recordVisit(t, url) {
     if (!/^https?:/.test(url)) return;
     const pid = tabProfile(t)?.id;
     if (!pid) return;
     const H = shared.hist;
     const list = (H[pid] ||= []);
-    let e = list.find(x => x.u === url);
-    if (!e) { e = { u: url, t: "", n: 0, l: 0 }; list.push(e); }
+    let idx = histIndex.get(list);
+    if (!idx || idx.size !== list.length) histIndex.set(list, idx = new Map(list.map(x => [x.u, x])));
+    let e = idx.get(url);
+    if (!e) { e = { u: url, t: "", n: 0, l: 0 }; list.push(e); idx.set(url, e); }
     e.n++;
     e.l = Date.now();
     if (t.label && t.label !== url) e.t = t.label;
-    if (list.length > 5000) { list.sort((a, b) => b.l - a.l); list.length = 4000; }
+    if (list.length > 5000) { list.sort((a, b) => b.l - a.l); list.length = 4000; histIndex.delete(list); }
     clearTimeout(histSaveTimer);
     histSaveTimer = setTimeout(() => IOUtils.writeJSON(HIST_PATH, H, { tmpPath: HIST_PATH + ".tmp" }).catch(() => {}), 2000);
   }
@@ -737,6 +741,57 @@
     const cutoff = Date.now() - hours * 3600e3;
     const old = gBrowser.tabs.filter(t => alive(t) && !t.selected && !tabItemId(t) && !t.pinned && t.lastAccessed && t.lastAccessed < cutoff);
     if (old.length) { gBrowser.removeTabs(old, { animate: false }); log(`archived ${old.length} tabs`); }
+  }
+
+  /* Loaded tabs idle for a while are unloaded (they stay in the sidebar and reload when opened):
+     frees their content process memory and stops background scripts. Tabs playing media are kept. */
+  const DISCARD_AFTER = 2 * 3600e3;
+  let lastWake = 0;
+  function discardIdle() {
+    if (little) return;
+    // Timers fire as soon as the machine wakes: unloading every idle tab at that moment, just as the user comes
+    // back and clicks one, races the content process shutdown and leaves the clicked tab blank (see healStuck).
+    if (Date.now() - lastWake < 10 * 60e3) return;
+    const cutoff = Date.now() - DISCARD_AFTER;
+    let n = 0;
+    for (const t of gBrowser.tabs) {
+      if (!alive(t) || t.selected || t.hasAttribute("pending") || t.hasAttribute("busy") || t === glance?.tab) continue;
+      if (t.soundPlaying || t.hasAttribute("pictureinpicture") || !t.lastAccessed || t.lastAccessed > cutoff) continue;
+      try { if (gBrowser.discardBrowser(t)) n++; } catch (e) { log("discard " + e); }
+    }
+    if (n) log(`unloaded ${n} idle tabs`);
+  }
+
+  /* After sleep (or a GPU reset) a tab can stay black: its content process is gone, or its layers were
+     never repainted. Check the selected tab and repair it: revive a crashed tab, reload one whose page is
+     gone, otherwise force a repaint. Returns what was done. */
+  function healTab(t) {
+    if (!alive(t) || t.hasAttribute("pending")) return "skip";
+    const b = t.linkedBrowser;
+    try {
+      if (t.hasAttribute("crashed")) { SessionStore.reviveCrashedTab(t); return "revived"; }
+      if (b.isRemoteBrowser && !t.hasAttribute("busy") && !b.browsingContext?.currentWindowGlobal) { b.reload(); return "reloaded"; }
+      if (t.selected) { b.preserveLayers?.(false); b.docShellIsActive = false; b.docShellIsActive = true; b.renderLayers = true; return "repainted"; }
+    } catch (e) { log("heal " + e); }
+    return "ok";
+  }
+  const healSelected = () => { if (!little) healTab(gBrowser.selectedTab); };
+
+  /* A tab unloaded and selected again within seconds can stay "pending" on about:blank for good: the session
+     restore never completes and neither reload() nor restoreTabContent() helps. Load the page it should show. */
+  function healStuck(t) {
+    if (little || !alive(t) || !t.selected || !t.hasAttribute("pending")) return false;
+    const b = t.linkedBrowser;
+    if (b.currentURI.spec !== "about:blank") return false;
+    try {
+      const st = JSON.parse(SessionStore.getTabState(t));
+      const url = st.entries?.[Math.max(0, (st.index || st.entries.length) - 1)]?.url;
+      if (!/^(https?|file):/.test(url || "")) return false;
+      b.fixupAndLoadURIString(url, { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      t.removeAttribute("pending");
+      log("healed a tab stuck while restoring: " + url);
+      return true;
+    } catch (e) { log("healStuck " + e); return false; }
   }
 
   /* ---------- profiles & workspaces ---------- */
@@ -1844,6 +1899,93 @@
     return res.sort((a, b) => b.s - a.s).filter(r => /^(https?|file):/.test(r.url) && !seen.has(r.url) && seen.add(r.url)).slice(0, 6);
   }
 
+  /* Well-known sites reachable by a short name or alias: typing "map" and pressing Enter opens Google Maps.
+     Each entry is [title, url, aliases…]; the first alias is also the canonical name. */
+  const SITES = [
+    ["Google Maps", "https://www.google.com/maps", "maps", "map", "gmaps", "plans"],
+    ["Google", "https://www.google.com", "google"],
+    ["Gmail", "https://mail.google.com", "gmail", "mail", "email", "webmail"],
+    ["Google Drive", "https://drive.google.com", "drive", "gdrive"],
+    ["Google Docs", "https://docs.google.com/document", "docs", "gdocs"],
+    ["Google Sheets", "https://docs.google.com/spreadsheets", "sheets", "gsheets", "spreadsheet"],
+    ["Google Calendar", "https://calendar.google.com", "calendar", "agenda", "gcal"],
+    ["Google Translate", "https://translate.google.com", "translate", "traduction", "traducteur"],
+    ["Google Photos", "https://photos.google.com", "photos"],
+    ["Google Meet", "https://meet.google.com", "meet"],
+    ["YouTube", "https://www.youtube.com", "youtube", "yt"],
+    ["GitHub", "https://github.com", "github", "gh"],
+    ["GitLab", "https://gitlab.com", "gitlab"],
+    ["Stack Overflow", "https://stackoverflow.com", "stackoverflow", "so"],
+    ["MDN Web Docs", "https://developer.mozilla.org", "mdn"],
+    ["Wikipedia", "https://www.wikipedia.org", "wikipedia", "wiki"],
+    ["Reddit", "https://www.reddit.com", "reddit"],
+    ["X", "https://x.com", "twitter", "x"],
+    ["Bluesky", "https://bsky.app", "bluesky", "bsky"],
+    ["Mastodon", "https://mastodon.social", "mastodon"],
+    ["LinkedIn", "https://www.linkedin.com", "linkedin"],
+    ["Facebook", "https://www.facebook.com", "facebook", "fb"],
+    ["Instagram", "https://www.instagram.com", "instagram", "insta", "ig"],
+    ["WhatsApp Web", "https://web.whatsapp.com", "whatsapp", "wa"],
+    ["Discord", "https://discord.com/app", "discord"],
+    ["Slack", "https://app.slack.com", "slack"],
+    ["Notion", "https://www.notion.so", "notion"],
+    ["Figma", "https://www.figma.com", "figma"],
+    ["Jira", "https://www.atlassian.com/software/jira", "jira"],
+    ["Confluence", "https://www.atlassian.com/software/confluence", "confluence"],
+    ["ChatGPT", "https://chatgpt.com", "chatgpt", "gpt", "openai"],
+    ["Claude", "https://claude.ai", "claude"],
+    ["Gemini", "https://gemini.google.com", "gemini"],
+    ["Perplexity", "https://www.perplexity.ai", "perplexity"],
+    ["Netflix", "https://www.netflix.com", "netflix"],
+    ["Prime Video", "https://www.primevideo.com", "primevideo", "prime"],
+    ["Disney+", "https://www.disneyplus.com", "disney", "disneyplus"],
+    ["Twitch", "https://www.twitch.tv", "twitch"],
+    ["Spotify", "https://open.spotify.com", "spotify"],
+    ["Deezer", "https://www.deezer.com", "deezer"],
+    ["SoundCloud", "https://soundcloud.com", "soundcloud"],
+    ["Amazon", "https://www.amazon.com", "amazon"],
+    ["eBay", "https://www.ebay.com", "ebay"],
+    ["Back Market", "https://www.backmarket.com", "backmarket"],
+    ["Leboncoin", "https://www.leboncoin.fr", "leboncoin", "lbc"],
+    ["Vinted", "https://www.vinted.fr", "vinted"],
+    ["Airbnb", "https://www.airbnb.com", "airbnb"],
+    ["Booking.com", "https://www.booking.com", "booking"],
+    ["Google Flights", "https://www.google.com/travel/flights", "flights", "vols"],
+    ["SNCF Connect", "https://www.sncf-connect.com", "sncf", "train"],
+    ["PayPal", "https://www.paypal.com", "paypal"],
+    ["Proton Mail", "https://mail.proton.me", "proton", "protonmail"],
+    ["Outlook", "https://outlook.live.com", "outlook", "hotmail"],
+    ["Microsoft Teams", "https://teams.microsoft.com", "teams"],
+    ["Zoom", "https://zoom.us", "zoom"],
+    ["Dropbox", "https://www.dropbox.com", "dropbox"],
+    ["npm", "https://www.npmjs.com", "npm"],
+    ["PyPI", "https://pypi.org", "pypi"],
+    ["crates.io", "https://crates.io", "crates"],
+    ["Hacker News", "https://news.ycombinator.com", "hackernews", "hn"],
+    ["Le Monde", "https://www.lemonde.fr", "lemonde"],
+    ["Météo-France", "https://meteofrance.com", "meteo", "météo", "weather"],
+    ["DeepL", "https://www.deepl.com/translator", "deepl"],
+    ["Canva", "https://www.canva.com", "canva"],
+    ["Pinterest", "https://www.pinterest.com", "pinterest"],
+    ["TikTok", "https://www.tiktok.com", "tiktok"],
+    ["IMDb", "https://www.imdb.com", "imdb"],
+    ["OpenStreetMap", "https://www.openstreetmap.org", "osm", "openstreetmap"],
+  ];
+
+  /* Sites matching a single typed word: an exact alias is "exact" (Enter opens it straight away), a prefix
+     of an alias or of the name is a weaker match. Several-word input never matches. */
+  function siteMatches(q) {
+    const w = q.trim().toLowerCase();
+    if (w.length < 2 || /\s/.test(w)) return [];
+    const out = [];
+    for (const [title, url, ...aliases] of SITES) {
+      const exact = aliases.includes(w) || title.toLowerCase() === w;
+      const prefix = !exact && w.length >= 3 && (aliases.some(a => a.startsWith(w)) || title.toLowerCase().startsWith(w));
+      if (exact || prefix) out.push({ kind: "site", title, sub: url, url, exact, badge: "Site" });
+    }
+    return out.sort((a, b) => b.exact - a.exact).slice(0, 3);
+  }
+
   async function remoteSuggestions(q) {
     if (!Services.prefs.getBoolPref("browser.search.suggest.enabled", true)) return [];
     const e = engine();
@@ -1862,8 +2004,11 @@
   function autofill(res, q) {
     const needle = q.toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "");
     if (!needle || /\s/.test(needle)) return;
+    // An exact alias ("map", "yt") always wins.
+    const exact = res.findIndex(r => r.kind === "site" && r.exact);
+    if (exact >= 0) { if (exact > 0) res.unshift(...res.splice(exact, 1)); return; }
     const bare = u => (u || "").toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "");
-    const rank = { tab: 0, item: 1, history: 2 };
+    const rank = { tab: 0, item: 1, history: 2, site: 3 };
     let best = -1;
     res.forEach((r, i) => {
       if (!(r.kind in rank) || r.far || !bare(r.sub).startsWith(needle)) return;
@@ -1903,6 +2048,8 @@
       : { kind: "go", title: fx.url, sub: "Open", url: fx.url });
 
     const seen = new Set();
+    // Known sites: a pure keyword ("map", "yt") shouldn't need to be a full address or already be in history.
+    if (fx.search) for (const site of siteMatches(q)) res.push(site);
     const tabs = gBrowser.tabs.filter(t => alive(t) && matches(`${t.label} ${tabUrl(t)}`, words))
       .sort(byRecency).slice(0, 5);
     for (const t of tabs) {
@@ -1939,10 +2086,10 @@
   function drawResults() {
     const kindIcon = { search: "search", go: "globe", cmd: "cmd", history: "clock" };
     palList.replaceChildren(...palResults.map((r, i) => h("div", { class: `sl-pr${i === palSel ? " sel" : ""}`, "data-i": i },
-      ["tab", "item", "history", "here"].includes(r.kind) ? favicon(r.sub, r.icon) : icon(kindIcon[r.kind] || "globe"),
+      ["tab", "item", "history", "here", "site"].includes(r.kind) ? favicon(r.sub, r.icon) : icon(kindIcon[r.kind] || "globe"),
       h("div", { class: "sl-pr-txt" },
         h("span", { class: "sl-pr-title", text: r.title }),
-        r.sub && h("span", { class: "sl-pr-sub", text: ["tab", "item", "history", "here"].includes(r.kind) ? host(r.sub) : r.sub })),
+        r.sub && h("span", { class: "sl-pr-sub", text: ["tab", "item", "history", "here", "site"].includes(r.kind) ? host(r.sub) : r.sub })),
       r.badge && h("span", { class: "sl-pr-badge", text: r.badge }))));
     // Manual scrolling: scrollIntoView would also scroll the window's containers.
     const sel = palList.querySelector(".sel");
@@ -3442,7 +3589,11 @@
     D = await loadData();
     shared.windows.add(window);
     Services.obs.addObserver(syncObserver, "sillage-sync-applied");
+    const wakeObserver = () => { lastWake = Date.now(); setTimeout(healSelected, 1500); };
+    Services.obs.addObserver(wakeObserver, "wake_notification");
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) healSelected(); });
     window.addEventListener("unload", () => {
+      Services.obs.removeObserver(wakeObserver, "wake_notification");
       shared.windows.delete(window);
       Services.obs.removeObserver(syncObserver, "sillage-sync-applied");
     });
@@ -3474,6 +3625,8 @@
       const t = gBrowser.selectedTab;
       updateLoading();
       if (little) return render();
+      setTimeout(healSelected, 300);
+      if (t.hasAttribute("pending")) setTimeout(() => healStuck(t), 4000);
       // Another tab chosen while a card is shown: the card is hidden, not closed; it is back when its page
       // or the card is chosen again. (Firefox's split view shows both tabs together.)
       if (glance) {
@@ -3538,7 +3691,9 @@
     if (!little && SessionStore.getCustomWindowValue(window, "sillage-little")) enterLittle();
     if (little) { log("Little Sillage window ready"); return; }
     // Notes expire while Sillage runs: the alerts in the sidebar follow.
-    setInterval(render, 60e3);
+    // (only when a note exists and the window is visible: nothing else changes over time)
+    setInterval(() => { if (!doc.hidden && D.workspaces.some(w => w.board?.notes?.length)) render(); }, 60e3);
+    setInterval(discardIdle, 600e3);
     for (const t of gBrowser.tabs) if (alive(t) && !tabWs(t)) setVal(t, WS_KEY, activeWs);
     // Split views (a card left open at the last quit) become regular tabs again.
     for (const sv of [...(gBrowser.splitViews || [])]) try { sv.unsplitTabs(); } catch (e) { log("unsplit " + e); }
@@ -3580,9 +3735,9 @@
       get mru() { return mru; }, get cycling() { return cycling; }, hist: () => shared.hist,
       renderNow, newTab, openItem, moveTab, moveItem, moveFolder, togglePin, toggleFavorite, deleteItem, createFolder,
       openGlance, closeGlance, glance: () => glance, get renderCount() { return renderCount; },
-      saveWs, deleteWs, selectTab, switchWs, closePalette, query, choose, todayTabs, tabWs, tabItemId, tabForItem,
+      saveWs, deleteWs, selectTab, switchWs, closePalette, query, choose, siteMatches, todayTabs, tabWs, tabItemId, tabForItem,
       archive, clearToday, runCommand, fixup, applyVisibility, cycleStep, endCycle, stepSidebar, createProfile, fixContainerColors, backToStart, tabId,
-      deleteProfile, inView, profOf, copyUrl, get palSel() { return palSel; }, stepWs,
+      healTab, healStuck, discardIdle, deleteProfile, inView, profOf, copyUrl, get palSel() { return palSel; }, stepWs,
       favicon, plainIcon, cachedIcon, updateLoading, HELLO, get loadEl() { return loadEl; },
       get sidebarVisible() { return sidebarVisible; },
       openBoard, closeBoard, boardUndo, boardCopy, boardPaste, boardDuplicate, readClipboard, addNote, addText, addLink, openLink, board, renewNote, snoozeNote, setTool, deleteBoardItem, select, expiredCount,

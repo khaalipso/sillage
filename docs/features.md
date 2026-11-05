@@ -65,7 +65,7 @@ Each section names the functions to start from in `profile/chrome/sillage.uc.js`
 
 `openPalette(mode)` and `query()`: URL fixup, search engine suggestions, open tabs, pinned items, palette
 history (per profile) and commands (`COMMANDS`, `dynamicCommands`). `choose()` runs the selection; commands
-are handled in `runCommand`. Inline autofill completes the best match. Tabs (`byRecency`) and pinned items
+are handled in `runCommand`. Inline autofill completes the best match. `SITES` is a built-in directory of well-known sites with aliases (`siteMatches`); an exact alias is selected first. Tabs (`byRecency`) and pinned items
 of the current workspace are listed before those of other workspaces.
 
 ## Recent tabs switcher

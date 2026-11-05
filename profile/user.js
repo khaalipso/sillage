@@ -7,8 +7,8 @@ user_pref("browser.tabs.warnOnClose", false);
 user_pref("browser.warnOnQuit", false);
 user_pref("browser.warnOnQuitShortcut", false);
 user_pref("browser.sessionstore.warnOnQuit", false);
-// Tabs stay alive, as in Arc: all tabs are restored at startup (a few at a time) instead of when first
-// selected, and the most recent tabs keep their rendering for instant switching.
+// Tabs load when first selected after a restart (Sillage unloads them again after a few idle hours),
+// and the most recent tabs keep their rendering for instant switching.
 user_pref("browser.sessionstore.restore_on_demand", true);
 user_pref("browser.sessionstore.restore_pinned_tabs_on_demand", true);
 user_pref("browser.tabs.remote.tabCacheSize", 3);

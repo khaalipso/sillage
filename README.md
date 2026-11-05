@@ -29,7 +29,7 @@ Firefox.
   icons: right-click an icon → *Hide in …*; right-click the extensions button → *Show hidden extensions*, or use
   the palette.
 - **Command palette** (<kbd>Ctrl</kbd>+<kbd>T</kbd> / <kbd>Ctrl</kbd>+<kbd>L</kbd>): URLs, web search with
-  suggestions, open tabs, pinned items, history and commands, with inline autofill of the best match. Tabs and
+  suggestions, open tabs, pinned items, history and commands, with inline autofill of the best match. Well-known sites open from a short name (`map` → Google Maps, `yt` → YouTube). Tabs and
   pinned items of the current workspace come before those of other workspaces.
 - **Recent tabs switcher** (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>→</kbd>): Alt+Tab-style cycling through the current workspace, with page
   thumbnails; the tab opens when the keys are released. The board counts as a tab here, and in
