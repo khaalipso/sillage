@@ -8,7 +8,17 @@
   const sel = () => gBrowser.selectedTab;
   const url = t => t.linkedBrowser.currentURI.spec;
   const until = async (fn, ms = 8000) => { const t0 = Date.now(); while (Date.now() - t0 < ms) { if (fn()) return true; await wait(100); } return false; };
-  const keydown = (opts) => window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...opts }));
+  // The shortcuts use Ctrl on Linux and ⌘ on macOS (Ctrl+Shift+arrows → ⌘⇧ arrows; Ctrl+arrows → ⌘⌥ arrows).
+  // Tests are written with Ctrl; this translates them for the platform.
+  const MAC = AppConstants.platform === "macosx";
+  const ACCEL = MAC ? "Meta" : "Control";
+  const keydown = (opts) => {
+    if (MAC && opts.ctrlKey && (opts.shiftKey || /^Arrow(Left|Right)$/.test(opts.key))) {
+      const { ctrlKey, ...rest } = opts;
+      opts = opts.shiftKey ? { ...rest, metaKey: true } : { ...rest, metaKey: true, altKey: true };
+    }
+    window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...opts }));
+  };
   const xulKey = (mods, key) => [...document.querySelectorAll("#sillage-keyset key")].find(k => k.getAttribute("modifiers") === mods && k.getAttribute("key") === key);
 
   try {
@@ -35,7 +45,7 @@
     S.selectTab(a); S.selectTab(b);
     const R = () => keydown({ key: "ArrowRight", code: "ArrowRight", ctrlKey: true, shiftKey: true });
     const Lk = () => keydown({ key: "ArrowLeft", code: "ArrowLeft", ctrlKey: true, shiftKey: true });
-    const release = () => window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+    const release = () => window.dispatchEvent(new KeyboardEvent("keyup", { key: ACCEL, bubbles: true }));
     const sw = document.getElementById("sl-switcher");
     R();
     ok(S.cycling && sel() === b, "Ctrl+Shift+→: cursor on the previous tab, no tab switch yet");
@@ -167,7 +177,7 @@
     ok(S.activeWs === ws1, "Ctrl+1 (physical key, any layout) → workspace 1");
     ok(c.hidden && !b2.hidden, "visibility swapped after switching");
     keydown({ key: "ArrowRight", code: "ArrowRight", ctrlKey: true, shiftKey: true });
-    window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keyup", { key: ACCEL, bubbles: true }));
     ok(S.activeWs === ws1 && sel() !== c && S.inView(sel()), "recent tabs stay within the current workspace");
     S.switchWs(ws1);
     const ctrlArrow = key => keydown({ key, code: key, ctrlKey: true });
@@ -187,11 +197,13 @@
     const tip = Cc["@mozilla.org/text-input-processor;1"].createInstance(Ci.nsITextInputProcessor);
     tip.beginInputTransactionForTests(window);
     const realKey = (key, code, keyCode, ctrl = false) => {
-      const c = new KeyboardEvent("", { key: "Control", code: "ControlLeft", keyCode: 17 });
+      const mods = !ctrl ? [] : MAC
+        ? [new KeyboardEvent("", { key: "Meta", code: "MetaLeft", keyCode: 224 }), new KeyboardEvent("", { key: "Alt", code: "AltLeft", keyCode: 18 })]
+        : [new KeyboardEvent("", { key: "Control", code: "ControlLeft", keyCode: 17 })];
       const k = new KeyboardEvent("", { key, code, keyCode });
-      if (ctrl) tip.keydown(c);
+      for (const m of mods) tip.keydown(m);
       tip.keydown(k); tip.keyup(k);
-      if (ctrl) tip.keyup(c);
+      for (const m of mods.reverse()) tip.keyup(m);
     };
     realKey("ArrowRight", "ArrowRight", 39, true);
     ok(imeOk && S.activeWs === ws2, "Ctrl+→ in a field the page focused by itself still switches workspaces");
@@ -507,7 +519,7 @@
     {
       const under = sel();
       const ctrlShiftRight = () => keydown({ key: "ArrowRight", code: "ArrowRight", ctrlKey: true, shiftKey: true });
-      const letGo = () => window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", bubbles: true }));
+      const letGo = () => window.dispatchEvent(new KeyboardEvent("keyup", { key: ACCEL, bubbles: true }));
       ctrlShiftRight();
       const swCards = [...document.querySelectorAll("#sl-switcher .sl-sw-card")];
       ok(swCards[0]?.classList.contains("board"), "recent tabs: the board counts as the current entry");
@@ -617,7 +629,7 @@
     // Undo / redo, copy / cut / paste / duplicate.
     const bwrap = document.getElementById("sl-board-wrap");
     const bkey = (key, opts = {}) => {
-      const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ctrlKey: true, ...opts });
+      const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ctrlKey: !MAC, metaKey: MAC, ...opts });
       view.dispatchEvent(ev);
       return ev.defaultPrevented;
     };
