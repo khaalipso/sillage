@@ -54,7 +54,10 @@ Firefox.
 - **Little Sillage**: links opened from other apps land in a small separate window instead of a workspace;
   "Open in…" moves the tab into the workspace of your choice. With several profiles, the window first asks
   which profile to open the link with (<kbd>1</kbd>…<kbd>9</kbd>, arrows and <kbd>Enter</kbd>; the last choice
-  is offered first), and the profile button in its bar reopens the page in another one. Can be turned off from the palette.
+  is offered first), and the profile button in its bar reopens the page in another one. <kbd>Ctrl</kbd>+<kbd>W</kbd>
+  (<kbd>⌘W</kbd>) closes the whole window. Can be turned off from the palette.
+- **Notifications** appear at the top right, in the Khaalipso style. A page opened in a background tab
+  (<kbd>Ctrl</kbd>+click, middle click) shows a small card; click it, or press <kbd>Ctrl</kbd>+<kbd>O</kbd> (<kbd>⌘O</kbd>), to switch to that tab.
 - **Sync** through your Firefox Account: workspaces, pinned items, folders, boards, profiles and favorites
   follow you across devices, end-to-end encrypted like the rest of Firefox Sync.
 - **Light on memory**: after a restart, tabs load when you open them; once loaded they stay alive. Hovering a

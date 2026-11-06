@@ -133,6 +133,16 @@ is chosen, in its container. The choice is remembered in `D.settings.littleProfi
 (`defaultLittleProfile`). "Open in" targets the main window's workspace, or, when that workspace belongs to
 another profile, the last workspace used with the page's profile (`D.lastWsByProfile`, set by `switchWs`).
 
+In a Little window, a capturing `keydown` handler turns Ctrl+W (⌘W) into `window.close()`.
+
+## Notifications
+
+`#sl-notes` is a fixed container at the top right holding the toast (`toast()`) and tab cards (`notifyTab`).
+`hookGlance`'s `addTab` wrapper calls `notifyTab` for a background tab opened from a page (`openerBrowser`) once
+startup is done; clicking the card, or Ctrl+O (⌘O; capturing `keydown`, only while a card is shown, it then replaces "Open file"), runs `selectTab` (switching workspace if needed). Cards disappear after
+7 s (hovering pauses), when the tab closes, and at most three are shown. The style follows khaalipso.github.io:
+dark glass, pill radius, amber accent, monospace eyebrow, `cubic-bezier(.32,.72,0,1)`.
+
 ## Keyboard shortcuts
 
 `SHORTCUTS` become XUL `<key>` elements (they act after the page had a chance to handle the key). Keys that

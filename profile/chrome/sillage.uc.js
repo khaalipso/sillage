@@ -959,7 +959,7 @@
 
   /* ---------- user interface ---------- */
 
-  let side, scroll, favBox, pinBox, todayBox, wsBar, wsTitle, peekZone, toastEl, orb;
+  let side, scroll, favBox, pinBox, todayBox, wsBar, wsTitle, peekZone, toastEl, notesEl, orb;
 
   function buildUi() {
     doc.documentElement.classList.add("sillage");
@@ -995,8 +995,9 @@
 
     peekZone = h("div", { id: "sl-peek" });
     toastEl = h("div", { id: "sl-toast" });
+    notesEl = h("div", { id: "sl-notes" }, toastEl);
     switcher = h("div", { id: "sl-switcher", hidden: true });
-    doc.body.append(peekZone, toastEl, switcher);
+    doc.body.append(peekZone, notesEl, switcher);
 
     wireSidebar();
     wireResize(resizer);
@@ -1194,6 +1195,30 @@
     toastEl.classList.add("show");
     clearTimeout(toast.t);
     toast.t = setTimeout(() => toastEl.classList.remove("show"), ms);
+  }
+
+  /* A page opened in a background tab: a small card (top right) offers to switch to it. */
+  function notifyTab(t, url) {
+    if (!notesEl || !alive(t)) return;
+    const where = () => { const u = tabUrl(t); return host(u && u !== "about:blank" ? u : String(url || "")); };
+    const label = () => (t.label && t.label !== "New Tab" ? t.label : "") || where() || "New page";
+    const title = h("span", { class: "sl-note-title", text: label() });
+    let hostEl;
+    const note = h("button", { class: "sl-note", title: "Switch to the new tab" },
+      h("span", { class: "sl-note-eyebrow", text: "New tab" }),
+      title,
+      hostEl = h("span", { class: "sl-note-host", text: where() }),
+      h("span", { class: "sl-note-go", text: IS_MAC ? "⌘O" : "Ctrl O" }));
+    const dismiss = () => { clearTimeout(timer); note.classList.add("out"); setTimeout(() => note.remove(), 250); };
+    note.onclick = () => { dismiss(); if (alive(t)) selectTab(t); };
+    const refresh = setInterval(() => { if (!note.isConnected || !alive(t)) return clearInterval(refresh); title.textContent = label(); hostEl.textContent = where(); }, 700);
+    let timer = setTimeout(dismiss, 7000);
+    note.addEventListener("mouseenter", () => clearTimeout(timer));
+    note.addEventListener("mouseleave", () => { timer = setTimeout(dismiss, 2500); });
+    t.addEventListener("TabClose", dismiss, { once: true });
+    while (notesEl.querySelectorAll(".sl-note:not(.out)").length >= 3) notesEl.querySelector(".sl-note:not(.out)").remove();
+    notesEl.append(note);
+    return note;
   }
 
   /* Animates layout changes of the sidebar for the duration of one transition. */
@@ -2420,7 +2445,11 @@
       if (glance && opener === glance.tab) closeGlance({ keep: true });
       const want = glanceEnabled() && !little && !glance && !boardOpen && opener?.selected && !isBlank(opener)
         && !opts.inBackground && !opts.fromExternal && typeof gBrowser.addTabSplitView === "function";
-      if (!want) return addTab.call(this, uri, opts);
+      if (!want) {
+        const nt = addTab.call(this, uri, opts);
+        if (started && !little && opts.inBackground && opts.openerBrowser && !opts.fromExternal && !opts.createLazyBrowser && nt) notifyTab(nt, uri?.spec || uri);
+        return nt;
+      }
       const t = addTab.call(this, uri, { ...opts, inBackground: true });
       try { openGlance(t, opener); } catch (e) { log("glance " + e + "\n" + e.stack); closeGlance({ keep: true }); }
       return t;
@@ -3486,6 +3515,15 @@
         e.stopPropagation();
         return stepWs(e.key === "ArrowLeft" ? -1 : 1);
       }
+      // ⌘O (Ctrl+O) follows the latest tab notification. Only while one is shown: it replaces "Open file" then.
+      if (accel(e) && !e.shiftKey && !e.altKey && (IS_MAC ? !e.ctrlKey : !e.metaKey) && e.code === "KeyO") {
+        const notes = notesEl?.querySelectorAll(".sl-note:not(.out)");
+        if (notes?.length) {
+          e.preventDefault();
+          e.stopPropagation();
+          return notes[notes.length - 1].click();
+        }
+      }
       // Little Sillage is one throwaway page: Ctrl+W / ⌘W closes the window, not just its tab.
       if (little && accel(e) && !e.shiftKey && !e.altKey && e.code === "KeyW") {
         e.preventDefault();
@@ -3735,7 +3773,7 @@
       get D() { return D; }, get activeWs() { return activeWs; }, get palResults() { return palResults; },
       get mru() { return mru; }, get cycling() { return cycling; }, hist: () => shared.hist,
       renderNow, newTab, openItem, moveTab, moveItem, moveFolder, togglePin, toggleFavorite, deleteItem, createFolder,
-      openGlance, closeGlance, glance: () => glance, get renderCount() { return renderCount; },
+      openGlance, closeGlance, glance: () => glance, notifyTab, get renderCount() { return renderCount; },
       saveWs, deleteWs, selectTab, switchWs, closePalette, query, choose, siteMatches, todayTabs, tabWs, tabItemId, tabForItem,
       archive, clearToday, runCommand, fixup, applyVisibility, cycleStep, endCycle, stepSidebar, createProfile, fixContainerColors, backToStart, tabId,
       healTab, healStuck, discardIdle, deleteProfile, inView, profOf, copyUrl, get palSel() { return palSel; }, stepWs,

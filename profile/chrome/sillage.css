@@ -336,14 +336,42 @@
 #sl-resizer { position: absolute; top: 0; right: -6px; bottom: 0; width: 8px; cursor: ew-resize; z-index: 3; }
 :root.sl-hidden #sl-resizer { display: none; }
 
-/* ---------- Toast ---------- */
-#sl-toast {
-  position: fixed; right: 24px; bottom: 24px; z-index: 100; padding: 9px 16px; border-radius: 10px;
-  background: hsl(var(--sl-h) 20% 12% / .94); color: #f4f2fa; font: menu; font-size: 13px;
-  box-shadow: 0 6px 24px hsl(0 0% 0% / .35); opacity: 0; transform: translateY(8px);
-  transition: opacity .15s, transform .15s; pointer-events: none;
+/* ---------- Notifications (top right) ----------
+   Khaalipso look (khaalipso.github.io): warm night glass, pill radius, amber accent, mono eyebrow. */
+#sl-notes {
+  position: fixed; top: 16px; right: 16px; z-index: 100; display: flex; flex-direction: column; align-items: flex-end;
+  gap: 8px; width: 300px; pointer-events: none; --kh-amber: #e8a14a; --kh-ease: cubic-bezier(.32, .72, 0, 1);
 }
+#sl-toast, .sl-note {
+  border: 1px solid rgb(255 255 255 / .14); background: rgb(19 18 9 / .78); color: #ededed;
+  backdrop-filter: blur(20px) saturate(1.4); box-shadow: 0 10px 34px hsl(0 0% 0% / .4);
+  font: menu; font-size: 13px;
+}
+#sl-toast {
+  max-width: 100%; padding: 8px 16px 8px 14px; border-radius: 999px; opacity: 0; transform: translateY(-14px);
+  transition: opacity .5s var(--kh-ease), transform .5s var(--kh-ease); position: relative;
+}
+#sl-toast::before { content: ""; display: inline-block; width: 6px; height: 6px; margin-right: 9px; border-radius: 50%; background: var(--kh-amber); vertical-align: 1px; }
 #sl-toast.show { opacity: 1; transform: none; }
+#sl-toast:not(.show) { height: 0; padding: 0; border: 0; overflow: hidden; }
+.sl-note {
+  position: relative; display: grid; grid-template-columns: 1fr auto; gap: 1px 12px; width: 100%; padding: 10px 14px 11px 16px;
+  border-radius: 18px; text-align: start; cursor: pointer; pointer-events: auto; overflow: hidden;
+  animation: sl-note-in .7s var(--kh-ease) both; transition: border-color .4s var(--kh-ease), background-color .4s var(--kh-ease), opacity .25s, transform .25s;
+}
+.sl-note::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 3px; border-radius: 0 3px 3px 0; background: var(--kh-amber); }
+.sl-note:hover { border-color: var(--kh-amber); background: rgb(30 26 12 / .88); }
+.sl-note.out { opacity: 0; transform: translateX(16px); pointer-events: none; }
+.sl-note-eyebrow { grid-column: 1 / -1; color: var(--kh-amber); font: 500 10px/14px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .16em; text-transform: uppercase; }
+.sl-note-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; letter-spacing: -.01em; }
+.sl-note-host { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #a1a1a1; font-size: 12px; }
+.sl-note-go {
+  grid-row: 2 / 4; grid-column: 2; align-self: center; padding: 3px 10px; border: 1px solid rgb(255 255 255 / .16); border-radius: 999px;
+  color: #b4b4b4; font: 500 11px/16px ui-monospace, "SF Mono", Menlo, monospace; transition: color .4s var(--kh-ease), border-color .4s var(--kh-ease);
+}
+.sl-note:hover .sl-note-go { color: var(--kh-amber); border-color: var(--kh-amber); }
+@keyframes sl-note-in { from { opacity: 0; transform: translateY(-24px); } }
+@media (prefers-reduced-motion: reduce) { .sl-note { animation: none; } }
 
 /* ---------- Palette ---------- */
 #sl-pal-wrap { position: fixed; inset: 0; z-index: 200; font: menu; font-size: 13px; color: var(--sl-fg); }

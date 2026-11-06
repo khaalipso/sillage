@@ -748,6 +748,18 @@
       ok(lw.closed, "little window closes after its last tab moves");
       ok((adopted.userContextId || 0) === S.profOf(ws1).userContextId, "the moved tab takes the workspace's profile");
     }
+    // Ctrl+W (⌘W) in a Little Sillage window closes the whole window, even with several tabs.
+    {
+      window.browserDOMWindow.openURI(Services.io.newURI("https://example.com/?little2"), null,
+        Ci.nsIBrowserDOMWindow.OPEN_DEFAULTWINDOW, Ci.nsIBrowserDOMWindow.OPEN_EXTERNAL, Services.scriptSecurityManager.getSystemPrincipal());
+      let lw2 = null;
+      await until(() => (lw2 = [...Services.wm.getEnumerator("navigator:browser")].find(w => w !== window && w.Sillage?.isLittle)), 15000);
+      if (lw2) {
+        lw2.gBrowser.addTab("https://example.org/?second", { triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+        lw2.dispatchEvent(new lw2.KeyboardEvent("keydown", { bubbles: true, cancelable: true, code: "KeyW", key: "w", [MAC ? "metaKey" : "ctrlKey"]: true }));
+        ok(await until(() => lw2.closed, 5000), "Ctrl+W closes the whole Little Sillage window");
+      } else ok(false, "second little window opened");
+    }
     if (lpExtra) S.deleteProfile(lpExtra.id);
     delete S.D.settings.littleProfile;
 
@@ -971,6 +983,21 @@
       const g2 = S.glance();
       document.querySelector('#sl-glance [data-act="keep"]').click();
       ok(!S.glance() && sel() === g2.tab && S.todayTabs(S.activeWs).includes(g2.tab), "open as tab keeps it in the workspace");
+      // A page opened in a background tab shows a notification (top right) that switches to it.
+      document.querySelectorAll(".sl-note").forEach(n => n.remove());
+      const bgTab = gBrowser.addTab("https://example.org/?bg", { inBackground: true, openerBrowser: page.linkedBrowser, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      const note = document.querySelector("#sl-notes .sl-note");
+      ok(!!note && sel() !== bgTab, "a background tab shows a notification");
+      const nr = document.getElementById("sl-notes").getBoundingClientRect();
+      ok(nr.top < 40 && Math.abs(nr.right - window.innerWidth) < 40, "notifications sit at the top right");
+      note?.click();
+      ok(sel() === bgTab, "clicking the notification switches to the new tab");
+      S.selectTab(g2.tab);
+      // ⌘O (Ctrl+O) follows the latest notification.
+      const bg2 = gBrowser.addTab("https://example.org/?bg2", { inBackground: true, openerBrowser: g2.tab.linkedBrowser, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
+      window.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, cancelable: true, key: "o", code: "KeyO", [MAC ? "metaKey" : "ctrlKey"]: true }));
+      ok(sel() === bg2 && !document.querySelector(".sl-note:not(.out)"), "⌘O switches to the latest notified tab");
+      S.selectTab(g2.tab);
       // Another card, then choosing another tab dismisses it.
       window.openLinkIn("https://example.org/?other", "tab", { openerBrowser: g2.tab.linkedBrowser, inBackground: false, triggeringPrincipal: Services.scriptSecurityManager.getSystemPrincipal() });
       await until(() => S.glance());
